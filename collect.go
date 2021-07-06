@@ -20,9 +20,10 @@ type Reporter interface {
 	FailNow()
 }
 
-// AssertEquals checks if the value of a given metric is equal to an expected
-// result. Other than promtest.GetMetric(…), this function aggregates the value
-// from all label combinations that match the given label set.
+// AssertEquals checks if the value of a given counter or gauge metric is equal
+// to an expected value. Other than promtest.GetMetric(…), this function
+// aggregates the value from all label combinations that match the given label
+// set.
 //
 // Example usage:
 //   promtest.AssertEquals(t, 5, requestMethodMetric, "method=GET")
@@ -53,6 +54,38 @@ func AssertEquals(t Reporter, expected float64, metric prometheus.Collector, lab
 
 	if expected != actualValue {
 		t.Errorf("Expected metric with labels=%q to have a value of %v but we got %v", labels, expected, actualValue)
+	}
+}
+
+// AssertSummarySampleCount checks if the sample count of a given summary metric
+// is equal to an expected value. Other than promtest.GetMetric(…), this function
+// aggregates the value from all label combinations that match the given label
+// set.
+//
+// Example usage:
+//   promtest.AssertSummarySampleCount(t, 5, requestDurationsMetric, "method=GET")
+func AssertSummarySampleCount(t Reporter, expected int, metric prometheus.Collector, labels ...string) {
+	t.Helper()
+	allLabels := CollectMetrics(t, metric)
+
+	var filteredLabels []*dto.Metric
+	for _, m := range allLabels {
+		if matches(t, m, labels) {
+			filteredLabels = append(filteredLabels, m)
+		}
+	}
+
+	var actualValue int
+	for _, m := range filteredLabels {
+		if m.Summary == nil {
+			t.Fatal("metric is not a summary")
+		}
+
+		actualValue += int(m.Summary.GetSampleCount())
+	}
+
+	if expected != actualValue {
+		t.Errorf("Expected metric with labels=%q to have a sample count of %v but we got %v", labels, expected, actualValue)
 	}
 }
 
